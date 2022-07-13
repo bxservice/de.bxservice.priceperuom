@@ -48,10 +48,7 @@ public class ProductPerUOMPricing extends MProductPricing {
 
 	@Override
 	public boolean calculatePrice() {
-		if (m_M_Product_ID <= 0 || m_M_PriceList_Version_ID <= 0)
-			return false;
-
-		if (!supportsPricePerUOM())
+		if (m_M_Product_ID <= 0 || m_M_PriceList_Version_ID <= 0 || !supportsPricePerUOM())
 			return super.calculatePrice();
 
 		calculated = calculatePricePerUOM();

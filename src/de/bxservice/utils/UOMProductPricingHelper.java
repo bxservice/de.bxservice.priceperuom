@@ -24,6 +24,8 @@
 **********************************************************************/
 package de.bxservice.utils;
 
+import java.util.List;
+
 import org.compiere.model.I_M_ProductPrice;
 import org.compiere.model.MProduct;
 import org.compiere.model.MProductPrice;
@@ -32,6 +34,8 @@ import org.compiere.util.DB;
 import org.compiere.util.Env;
 
 public class UOMProductPricingHelper {
+	
+	public static final String COLUMNNAME_ManagePricePerUOM = "BXS_IsPricePerUOM";
 
 	public static MProductPrice getMProductPrice(int M_PriceList_Version_ID, int M_Product_ID, int C_UOM_ID, String trxName) {
 		final String whereClause = MProductPrice.COLUMNNAME_M_PriceList_Version_ID +"=? AND "+MProductPrice.COLUMNNAME_M_Product_ID
@@ -48,8 +52,8 @@ public class UOMProductPricingHelper {
 				hasPricesPerUOM(productID, priceListVersionID) && !product.isBOM();
 	}
 
-	private static boolean managesPricePerUOM(MProduct product) {
-		return product.get_ValueAsBoolean("BXS_IsPricePerUOM");
+	public static boolean managesPricePerUOM(MProduct product) {
+		return product.get_ValueAsBoolean(COLUMNNAME_ManagePricePerUOM);
 	}
 
 	private static boolean hasPricesPerUOM(int productID, int priceListVersionID) {
@@ -60,6 +64,26 @@ public class UOMProductPricingHelper {
 				+ " AND pp.M_PriceList_Version_ID=?"
 				+ " AND pp.C_UOM_ID IS NOT NULL";
 		return DB.getSQLValue(null, sql, productID, priceListVersionID) > 0;
+	}
+	
+	public static List<MProductPrice> getProductPricesWithNullUOM(int productID) {
+		final String whereClause = " M_Product_ID=? AND C_UOM_ID IS NULL";
+		
+		return new Query(Env.getCtx(),I_M_ProductPrice.Table_Name,  whereClause, null)
+				.setParameters(productID)
+				.setOnlyActiveRecords(true)
+				.setClient_ID()
+				.list();
+	}
+	
+	public static boolean hasPricesForNonDefaultUOM(MProduct product) {
+		final String sql = "SELECT 1 "
+				+ "FROM M_ProductPrice pp "
+				+ "WHERE pp.IsActive='Y'"
+				+ " AND pp.M_Product_ID=?"
+				+ " AND pp.C_UOM_ID IS NOT NULL"
+				+ " AND pp.C_UOM_ID != ?";
+		return DB.getSQLValue(null, sql, product.getM_Product_ID(), product.getC_UOM_ID()) > 0;
 	}
 	
 }

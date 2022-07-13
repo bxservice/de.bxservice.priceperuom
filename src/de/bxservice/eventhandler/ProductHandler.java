@@ -22,39 +22,60 @@
 * Contributors:                                                       *
 * - Diego Ruiz - BX Service GmbH                                      *
 **********************************************************************/
-package de.bxservice.model;
+package de.bxservice.eventhandler;
 
-import java.math.BigDecimal;
-import java.util.Properties;
+import java.util.List;
 
-import org.adempiere.base.IColumnCallout;
-import org.compiere.model.GridField;
-import org.compiere.model.GridTab;
+import org.adempiere.exceptions.AdempiereException;
+import org.compiere.model.MProduct;
 import org.compiere.model.MProductPrice;
-import org.compiere.util.Env;
 
 import de.bxservice.utils.UOMProductPricingHelper;
 
-public class CalloutUOMOrderLine implements IColumnCallout {
+public class ProductHandler extends AbstractPOHandler {
+
+	private MProduct product;
+	
+	public ProductHandler(MProduct po) {
+		super(po);
+		this.product = po;
+	}
 
 	@Override
-	public String start(Properties ctx, int WindowNo, GridTab mTab, GridField mField, Object value, Object oldValue) {
-		int M_PriceList_Version_ID = Env.getContextAsInt(ctx, WindowNo, "M_PriceList_Version_ID");
-		int M_Product_ID = Env.getContextAsInt(ctx, WindowNo, mTab.getTabNo(), "M_Product_ID");
-
-		if (UOMProductPricingHelper.supportsPricePerUOM(M_Product_ID, M_PriceList_Version_ID) && value != null) {
-			int C_UOM_ID = ((Integer) value).intValue();
-			MProductPrice productPrice = getMProductPrice(M_Product_ID,M_PriceList_Version_ID,C_UOM_ID);
-			if (productPrice != null) {
-				BigDecimal priceEntered = productPrice.getPriceStd();
-				mTab.setValue("PriceEntered", priceEntered);
-			}
-		}
-		return null;
+	public void validateUpdate() {
+		if (product.is_ValueChanged(UOMProductPricingHelper.COLUMNNAME_ManagePricePerUOM))
+			checkValidChange();
 	}
 	
-	private MProductPrice getMProductPrice(int M_Product_ID, int M_PriceList_Version_ID, int C_UOM_ID) {
-		return UOMProductPricingHelper.getMProductPrice(M_PriceList_Version_ID, M_Product_ID, C_UOM_ID, null);
+	private void checkValidChange() {
+		if (isProductManagedPerUOM())
+			setDefaultUOMToExistingProductPrices();
+		else
+			validateDisableManagePricePerUOM();
 	}
-
+	
+	private boolean isProductManagedPerUOM() {
+		return  product.get_ValueAsBoolean(UOMProductPricingHelper.COLUMNNAME_ManagePricePerUOM);
+	}
+	
+	private void setDefaultUOMToExistingProductPrices() {
+		List<MProductPrice> pricesWithNoUOM = UOMProductPricingHelper.getProductPricesWithNullUOM(product.getM_Product_ID());
+		if (pricesWithNoUOM != null && !pricesWithNoUOM.isEmpty()) {
+			for (MProductPrice productPrice : pricesWithNoUOM) {
+				setDefaultUOMToProductPrice(productPrice);
+			}
+		}
+	}
+	
+	private void setDefaultUOMToProductPrice(MProductPrice productPrice) {
+		log.warning("Adding default UOM to product price: " + productPrice.get_ID());
+		productPrice.set_ValueOfColumn("C_UOM_ID", product.getC_UOM_ID());
+		productPrice.saveEx();
+	}
+	
+	private void validateDisableManagePricePerUOM() {
+		if (UOMProductPricingHelper.hasPricesForNonDefaultUOM(product)) {
+			throw new AdempiereException("The product has different prices per UOM configured. Please delete the non default records before disabling the feature.");
+		}
+	}
 }

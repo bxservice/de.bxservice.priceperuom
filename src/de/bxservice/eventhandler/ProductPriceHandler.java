@@ -22,39 +22,29 @@
 * Contributors:                                                       *
 * - Diego Ruiz - BX Service GmbH                                      *
 **********************************************************************/
-package de.bxservice.model;
+package de.bxservice.eventhandler;
 
-import java.math.BigDecimal;
-import java.util.Properties;
-
-import org.adempiere.base.IColumnCallout;
-import org.compiere.model.GridField;
-import org.compiere.model.GridTab;
+import org.adempiere.exceptions.AdempiereException;
+import org.compiere.model.MProduct;
 import org.compiere.model.MProductPrice;
-import org.compiere.util.Env;
 
 import de.bxservice.utils.UOMProductPricingHelper;
 
-public class CalloutUOMOrderLine implements IColumnCallout {
+public class ProductPriceHandler extends AbstractPOHandler {
+
+	private MProductPrice productPrice;
+	
+	public ProductPriceHandler(MProductPrice po) {
+		super(po);
+		this.productPrice = po;
+	}
 
 	@Override
-	public String start(Properties ctx, int WindowNo, GridTab mTab, GridField mField, Object value, Object oldValue) {
-		int M_PriceList_Version_ID = Env.getContextAsInt(ctx, WindowNo, "M_PriceList_Version_ID");
-		int M_Product_ID = Env.getContextAsInt(ctx, WindowNo, mTab.getTabNo(), "M_Product_ID");
-
-		if (UOMProductPricingHelper.supportsPricePerUOM(M_Product_ID, M_PriceList_Version_ID) && value != null) {
-			int C_UOM_ID = ((Integer) value).intValue();
-			MProductPrice productPrice = getMProductPrice(M_Product_ID,M_PriceList_Version_ID,C_UOM_ID);
-			if (productPrice != null) {
-				BigDecimal priceEntered = productPrice.getPriceStd();
-				mTab.setValue("PriceEntered", priceEntered);
-			}
+	public void validateNew() {
+		MProduct product = MProduct.get(productPrice.getM_Product_ID());
+		if (UOMProductPricingHelper.managesPricePerUOM(product) && productPrice.get_ValueAsInt("C_UOM_ID") <= 0) {
+			throw new AdempiereException("UOM Price is mandatory for this product, please fill it up before saving.");
 		}
-		return null;
-	}
-	
-	private MProductPrice getMProductPrice(int M_Product_ID, int M_PriceList_Version_ID, int C_UOM_ID) {
-		return UOMProductPricingHelper.getMProductPrice(M_PriceList_Version_ID, M_Product_ID, C_UOM_ID, null);
 	}
 
 }
